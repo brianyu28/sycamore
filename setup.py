@@ -9,7 +9,8 @@ setup(
     description="2D animation tool.",
     include_package_data=True,
     install_requires=[
-        "argparse>=1.4",
+        "numpy",
+        "pillow==5.3.0",
     ],
     license="GPL-3.0",
     long_description=readme,
