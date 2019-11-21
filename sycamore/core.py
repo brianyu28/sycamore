@@ -7,6 +7,8 @@ import os
 from collections import namedtuple
 from PIL import Image, ImageColor, ImageDraw
 
+from .util import *
+
 Keyframe = namedtuple("Keyframe", ["start", "end", "compute"])
 
 class Story():
@@ -15,7 +17,7 @@ class Story():
         """Create a new story."""
         self.width = width
         self.height = height
-        self.background = ImageColor.getrgb(background) if isinstance(background, str) else background
+        self.background = get_rgb(background)
         self.frames = frames
         self.objects = []
     
@@ -23,9 +25,10 @@ class Story():
         """Generate image for a single frame."""
         img = Image.new("RGB", (self.width, self.height), color=self.background)
         draw = ImageDraw.Draw(img, "RGBA")
-        for obj in self.objects:
+        for obj in sorted(self.objects, key=lambda obj: obj.layer):
             if obj.present_for_frame(i):
-                obj.render(draw, i)
+                props = obj.get_props_for_frame(i)
+                obj.render(draw, props, i)
         return img
     
     def output_frame(self, i, filename):
@@ -63,7 +66,7 @@ class Object():
             Keyframe(start=0, end=None, compute=lambda _: props)
         ]
 
-
+    
     def present_for_frame(self, frame):
         """Determines if an object should be shown for a given frame."""
         if frame < (self.start if self.start is not None else 0):
@@ -73,8 +76,15 @@ class Object():
         return frame < self.end
 
 
-    def render(self, draw, frame):
+    def render(self, draw, props, frame):
         return
+
+    
+    def hold_until(self, frame):
+        last = self.keyframes[-1]
+        del self.keyframes[-1]
+        self.keyframes.append(Keyframe(start=last.start, end=frame, compute=last.compute))
+        self.keyframes.append(Keyframe(start=frame, end=None, compute=last.compute))
 
     
     def add_keyframe(self, frame, props, interpolate=True):
@@ -83,24 +93,38 @@ class Object():
         if frame < last.start:
             raise Exception("Adding keyframe before the last start point.")
 
-        color_props = ["fill", "background", "outline"]
-        for prop in color_props:
-            if isinstance(props.get(prop), str):
-                props[prop] = ImageColor.getrgb(props[prop])
-            if props.get(prop) and len(props.get(prop)) == 3:
-                props[prop] = (props[prop][0], props[prop][1], props[prop][2], 255)
-
-        # Calculate new props
+        # Get final position of previous keyframe
         last_props = last.compute(frame - 1)
-        new_props = copy.copy(last_props)
-        new_props.update(props)
 
         # No interpolation
         if interpolate == False:
             self.keyframes.append(Keyframe(start=last.start, end=frame, compute=last.compute))
 
+        # If a specific interpolation function is defined
+        elif callable(props):
+            def compute(i):
+                result = props(i)
+                for prop in last_props:
+                    if prop not in result:
+                        result.setdefault(prop, last_props[prop])
+                return result
+            self.keyframes.append(Keyframe(start=last.start, end=frame, compute=compute))
+
+            # Get new properties at end of keyframe
+            new_props = copy.copy(last_props)
+            new_props.update(compute(frame))
+
         # Interpolation
         else:
+            color_props = ["fill", "background", "outline"]
+            for prop in color_props:
+                if props.get(prop):
+                    props[prop] = get_rgb(props[prop])
+
+            # Calculate new props
+            new_props = copy.copy(last_props)
+            new_props.update(props)
+
             def compute(i):
                 progress = (i - last.start) / (frame - last.start)
                 interpolated_props = {}
@@ -127,7 +151,23 @@ class Object():
         for keyframe in self.keyframes:
             if keyframe.start <= frame and (keyframe.end is None or frame < keyframe.end):
                 return keyframe.compute(frame)
-                break
+
+
+class Group(Object):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.children = []
+
+    
+    def add_child(self, child):
+        self.children.append(child)
+
+
+    def render(self, draw, props, frame):
+        for child in self.children:
+            child_props = child.get_props_for_frame(frame)
+            child.render(draw, child_props, frame, offset=(props["x"], props["y"]))
 
 
 class Rectangle(Object):
@@ -142,13 +182,13 @@ class Rectangle(Object):
         self.props.setdefault("outline", "black")
         self.props.setdefault("outline_width", 5)
         for color in ["fill", "outline"]:
-            if isinstance(self.props[color], str):
-                self.props[color] = ImageColor.getrgb(self.props[color])
+            self.props[color] = get_rgb(self.props[color])
 
-    def render(self, draw, frame):
-        props = self.get_props_for_frame(frame)
+    def render(self, draw, props, frame, offset=(0, 0)):
+        x = props["x"] + offset[0]
+        y = props["y"] + offset[1]
         draw.rectangle(
-            [(props["x"], props["y"]), (props["x"] + props["width"], props["y"] + props["height"])],
+            [(x, y), (x + props["width"], y + props["height"])],
             fill=props["fill"], outline=props["outline"], width=props["outline_width"]
         )
 
@@ -160,4 +200,40 @@ class Text(Object):
         self.props.setdefault("x", 0)
         self.props.setdefault("y", 0)
         self.props.setdefault("text", "Text")
-        self.props.setdefault("fill", "TODO: need to figure out coloring")
+        self.props.setdefault("fill", "black")
+        self.props.setdefault("font", None)
+        for color in ["fill"]:
+            self.props[color] = get_rgb(self.props[color])
+
+    def render(self, draw, props, frame, offset=(0, 0)):
+        x = props["x"] + offset[0]
+        y = props["y"] + offset[1]
+        draw.text(
+            (x, y), props["text"], fill=props["fill"], font=props["font"]
+        )
+
+class Arc(Object):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.props.setdefault("x0", 0)
+        self.props.setdefault("y0", 0)
+        self.props.setdefault("x1", 100)
+        self.props.setdefault("y1", 100)
+        self.props.setdefault("start_angle", Angle.TOP)
+        self.props.setdefault("end_angle", Angle.RIGHT)
+        self.props.setdefault("fill", "black")
+        self.props.setdefault("width", 5)
+        for color in ["fill"]:
+            self.props[color] = get_rgb(self.props[color])
+
+    def render(self, draw, props, frame, offset=(0, 0)):
+        x0 = props["x0"] + offset[0]
+        y0 = props["y0"] + offset[1]
+        x1 = props["x1"] + offset[0]
+        y1 = props["y1"] + offset[1]
+        start_angle = props["start_angle"] * (180 / math.pi)
+        end_angle = props["end_angle"] * (180 / math.pi)
+        draw.arc(
+            (x0, y0, x1, y1), start_angle, end_angle, fill=props["fill"], width=props["width"]
+        )
