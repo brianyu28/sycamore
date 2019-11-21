@@ -12,6 +12,31 @@ from .util import *
 
 Keyframe = namedtuple("Keyframe", ["start", "end", "compute"])
 
+class StorySequence():
+    def __init__(self, width=1920, height=1080):
+        """Creates a sequence of stories."""
+        self.width = width
+        self.height = height
+        self.stories = []
+
+    def add_story(self, story):
+        self.stories.append(story)
+
+    def output_video(self, filename, fps=30):
+        if os.path.exists(filename):
+            os.remove(filename)
+        video = cv2.VideoWriter(filename, -1, fps, (self.width, self.height))
+        for story in self.stories:
+            if isinstance(story, Story):
+                for i in range(story.frames):
+                    frame = story.get_frame(i)
+                    video.write(cv2.cvtColor(numpy.array(frame), cv2.COLOR_RGB2BGR))
+            elif isinstance(story, Video):
+                for frame in story.frames:
+                    video.write(frame)
+        video.release()
+
+        
 class Story():
 
     def __init__(self, width=1920, height=1080, frames=1, background="white"):
@@ -52,6 +77,18 @@ class Story():
 
     def add_object(self, obj):
         self.objects.append(obj)
+
+
+class Video():
+    def __init__(self, filename):
+        self.frames = []
+        vidcap = cv2.VideoCapture(filename)
+        while True:
+            success, image = vidcap.read()
+            if success:
+                self.frames.append(image)
+            else:
+                break
 
 
 class Object():
