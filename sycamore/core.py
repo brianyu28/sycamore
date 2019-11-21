@@ -297,3 +297,72 @@ class Image(Object):
         copy.putalpha(round(props["opacity"]))
         imageLayer.paste(copy, (x, y), self.image)
         return PILImage.alpha_composite(img, imageLayer)
+
+
+class Line(Object):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.props.setdefault("x0", 0)
+        self.props.setdefault("y0", 0)
+        self.props.setdefault("x1", 100)
+        self.props.setdefault("y1", 100)
+        self.props.setdefault("color", "black")
+        self.props.setdefault("width", 5)
+        for color in ["color"]:
+            self.props[color] = get_rgb(self.props[color])
+
+    def render(self, img, props, frame, offset=(0, 0)):
+        x0 = round(props["x0"] + offset[0])
+        y0 = round(props["y0"] + offset[1])
+        x1 = round(props["x1"] + offset[0])
+        y1 = round(props["y1"] + offset[1])
+        draw = aggdraw.Draw(img)
+        pen = aggdraw.Pen(props["color"], props["width"])
+        draw.line((x0, y0, x1, y1), pen)
+        draw.flush()
+        return img
+
+
+class Polygon(Object):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.props.setdefault("coords", [0, 0, 100, 100, 0, 100])
+        self.props.setdefault("color", "black")
+        self.props.setdefault("fill", "white")
+        self.props.setdefault("width", 5)
+        for color in ["color", "fill"]:
+            self.props[color] = get_rgb(self.props[color])
+
+    def render(self, img, props, frame, offset=(0, 0)):
+        coords = [round(coord) for coord in props["coords"]]
+        draw = aggdraw.Draw(img)
+        pen = aggdraw.Pen(props["color"], props["width"])
+        color = props["fill"]
+        brush = aggdraw.Brush((color[0], color[1], color[2]), color[3])
+        draw.polygon(coords, pen, brush)
+        draw.flush()
+        return img
+
+
+class Path(Object):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        default = aggdraw.Path()
+        default.moveto(100, 100)
+        default.curveto(200, 133, 200, 167, 100, 200)
+        self.props.setdefault("path", default)
+        self.props.setdefault("color", "black")
+        self.props.setdefault("width", 5)
+        for color in ["color"]:
+            self.props[color] = get_rgb(self.props[color])
+
+    def render(self, img, props, frame, offset=(0, 0)):
+        path = props["path"]
+        draw = aggdraw.Draw(img)
+        pen = aggdraw.Pen(props["color"], props["width"])
+        draw.path(path, pen)
+        draw.flush()
+        return img
