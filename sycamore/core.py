@@ -1,3 +1,4 @@
+import aggdraw
 import copy
 import cv2
 import math
@@ -25,10 +26,14 @@ class Story():
         """Generate image for a single frame."""
         img = Image.new("RGB", (self.width, self.height), color=self.background)
         draw = ImageDraw.Draw(img, "RGBA")
+        draw_agg = aggdraw.Draw(img)
         for obj in sorted(self.objects, key=lambda obj: obj.layer):
             if obj.present_for_frame(i):
                 props = obj.get_props_for_frame(i)
-                obj.render(draw, props, i)
+                if obj.RENDER_METHOD == "aggdraw":
+                    obj.render(draw_agg, props, i)
+                else:
+                    obj.render(draw, props, i)
         return img
     
     def output_frame(self, i, filename):
@@ -55,6 +60,7 @@ class Story():
 
 
 class Object():
+    RENDER_METHOD = "imagedraw"
 
 
     def __init__(self, start=None, end=None, layer=1, props=None):
@@ -129,9 +135,7 @@ class Object():
                 progress = (i - last.start) / (frame - last.start)
                 interpolated_props = {}
                 for prop in last_props:
-                    if isinstance(last_props[prop], int):
-                        interpolated_props[prop] = int(last_props[prop] + progress * (new_props[prop] - last_props[prop]))
-                    elif isinstance(last_props[prop], float):
+                    if isinstance(last_props[prop], int) or isinstance(last_props[prop], float):
                         interpolated_props[prop] = last_props[prop] + progress * (new_props[prop] - last_props[prop])
                     elif isinstance(last_props[prop], tuple) and len(last_props[prop]) == 4:
                         interpolated_props[prop] = (
@@ -185,8 +189,8 @@ class Rectangle(Object):
             self.props[color] = get_rgb(self.props[color])
 
     def render(self, draw, props, frame, offset=(0, 0)):
-        x = props["x"] + offset[0]
-        y = props["y"] + offset[1]
+        x = round(props["x"] + offset[0])
+        y = round(props["y"] + offset[1])
         draw.rectangle(
             [(x, y), (x + props["width"], y + props["height"])],
             fill=props["fill"], outline=props["outline"], width=props["outline_width"]
@@ -194,6 +198,7 @@ class Rectangle(Object):
 
 
 class Text(Object):
+    RENDER_METHOD = "aggdraw"
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -206,13 +211,15 @@ class Text(Object):
             self.props[color] = get_rgb(self.props[color])
 
     def render(self, draw, props, frame, offset=(0, 0)):
-        x = props["x"] + offset[0]
-        y = props["y"] + offset[1]
+        x = round(props["x"] + offset[0])
+        y = round(props["y"] + offset[1])
         draw.text(
-            (x, y), props["text"], fill=props["fill"], font=props["font"]
+            (x, y), props["text"], props["font"]
         )
+        draw.flush()
 
 class Arc(Object):
+    RENDER_METHOD = "aggdraw"
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -228,12 +235,14 @@ class Arc(Object):
             self.props[color] = get_rgb(self.props[color])
 
     def render(self, draw, props, frame, offset=(0, 0)):
-        x0 = props["x0"] + offset[0]
-        y0 = props["y0"] + offset[1]
-        x1 = props["x1"] + offset[0]
-        y1 = props["y1"] + offset[1]
+        x0 = round(props["x0"] + offset[0])
+        y0 = round(props["y0"] + offset[1])
+        x1 = round(props["x1"] + offset[0])
+        y1 = round(props["y1"] + offset[1])
         start_angle = props["start_angle"] * (180 / math.pi)
         end_angle = props["end_angle"] * (180 / math.pi)
+        pen = aggdraw.Pen(props["fill"], props["width"])
         draw.arc(
-            (x0, y0, x1, y1), start_angle, end_angle, fill=props["fill"], width=props["width"]
+            (x0, y0, x1, y1), start_angle, end_angle, pen
         )
+        draw.flush()
