@@ -2,7 +2,7 @@ import aggdraw
 import math
 
 from functools import lru_cache
-from PIL import ImageColor, ImageFont
+from PIL import Image as PILImage, ImageColor, ImageFont
 
 class Angle():
     RIGHT = 0
@@ -27,7 +27,18 @@ def get_rgb(color):
 
 @lru_cache(maxsize=128)
 def load_font(filename, size=12):
-    return ImageFont.truetype(filename, size)
+    return ImageFont.truetype(filename, int(size))
+
+def load_image(filename, width=None, height=None):
+    img = PILImage.open(filename)
+    w, h = img.size
+    if width is None and height is not None:
+        img = img.resize((int(w * (height / h)), height))
+    elif width is not None and height is None:
+        img = img.resize((width, int(h * (width / w))))
+    elif width is not None and height is not None:
+        img = img.resize((width, height))
+    return img
 
 def circular_path(x, y, radius, orbit_duration=30, start_angle=Angle.RIGHT, start_frame=0, direction=Direction.CLOCKWISE):
     """

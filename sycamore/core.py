@@ -6,7 +6,7 @@ import numpy
 import os
 
 from collections import namedtuple
-from PIL import Image, ImageColor, ImageDraw
+from PIL import Image as PILImage, ImageColor, ImageDraw
 
 from .util import *
 
@@ -24,11 +24,11 @@ class Story():
     
     def get_frame(self, i):
         """Generate image for a single frame."""
-        img = Image.new("RGB", (self.width, self.height), color=self.background)
+        img = PILImage.new("RGBA", (self.width, self.height), color=self.background)
         for obj in sorted(self.objects, key=lambda obj: obj.layer):
             if obj.present_for_frame(i):
                 props = obj.get_props_for_frame(i)
-                obj.render(img, props, i)
+                img = obj.render(img, props, i)
         return img
     
     def output_frame(self, i, filename):
@@ -76,7 +76,7 @@ class Object():
 
 
     def render(self, img, props, frame):
-        return
+        return img
 
     
     def hold_until(self, frame):
@@ -163,8 +163,10 @@ class Group(Object):
 
     def render(self, img, props, frame):
         for child in self.children:
-            child_props = child.get_props_for_frame(frame)
-            child.render(img, child_props, frame, offset=(props["x"], props["y"]))
+            if child.present_for_frame(frame):
+                child_props = child.get_props_for_frame(frame)
+                img = child.render(img, child_props, frame, offset=(props["x"], props["y"]))
+        return img
 
 
 class Rectangle(Object):
@@ -184,11 +186,15 @@ class Rectangle(Object):
     def render(self, img, props, frame, offset=(0, 0)):
         x = round(props["x"] + offset[0])
         y = round(props["y"] + offset[1])
-        draw = ImageDraw.Draw(img)
+        width = round(props["width"])
+        height = round(props["height"])
+        outline_width = round(props["outline_width"])
+        draw = ImageDraw.Draw(img, "RGBA")
         draw.rectangle(
-            [(x, y), (x + props["width"], y + props["height"])],
-            fill=props["fill"], outline=props["outline"], width=props["outline_width"]
+            [(x, y), (x + width, y + height)],
+            fill=props["fill"], outline=props["outline"], width=outline_width
         )
+        return img
 
 
 class Text(Object):
@@ -205,11 +211,13 @@ class Text(Object):
             self.props[color] = get_rgb(self.props[color])
 
     def render(self, img, props, frame, offset=(0, 0)):
+        txt = PILImage.new("RGBA", img.size, (255, 255, 255, 0))
         x = round(props["x"] + offset[0])
         y = round(props["y"] + offset[1])
-        draw = ImageDraw.Draw(img)
+        draw = ImageDraw.Draw(txt)
         font = load_font(props["font"], props["size"])
         draw.text((x, y), props["text"], font=font, fill=props["fill"])
+        return PILImage.alpha_composite(img, txt)
 
 class Arc(Object):
 
@@ -239,6 +247,7 @@ class Arc(Object):
             (x0, y0, x1, y1), start_angle, end_angle, pen
         )
         draw.flush()
+        return img
 
 
 class Ellipse(Object):
@@ -266,3 +275,25 @@ class Ellipse(Object):
         brush = aggdraw.Brush((color[0], color[1], color[2]), color[3])
         draw.ellipse((x0, y0, x1, y1), pen, brush)
         draw.flush()
+        return img
+
+class Image(Object):
+
+    def __init__(self, image, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.image = image
+        width, height = image.size
+        self.props.setdefault("x", 0)
+        self.props.setdefault("y", 0)
+        self.props.setdefault("width", width)
+        self.props.setdefault("height", height)
+        self.props.setdefault("opacity", 128)
+
+    def render(self, img, props, frame, offset=(0, 0)):
+        imageLayer = PILImage.new("RGBA", img.size, (255, 255, 255, 0))
+        x = round(props["x"] + offset[0])
+        y = round(props["y"] + offset[1])
+        copy = self.image.copy()
+        copy.putalpha(round(props["opacity"]))
+        imageLayer.paste(copy, (x, y), self.image)
+        return PILImage.alpha_composite(img, imageLayer)
