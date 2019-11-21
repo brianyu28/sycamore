@@ -1,7 +1,8 @@
 import aggdraw
 import math
 
-from PIL import ImageColor
+from functools import lru_cache
+from PIL import ImageColor, ImageFont
 
 class Angle():
     RIGHT = 0
@@ -24,8 +25,9 @@ def get_rgb(color):
         return (color[0], color[1], color[2], 255)
 
 
-def load_font(name, color="black", size=12, opacity=255):
-    return aggdraw.Font(color, name, size=size, opacity=opacity)
+@lru_cache(maxsize=128)
+def load_font(filename, size=12):
+    return ImageFont.truetype(filename, size)
 
 def circular_path(x, y, radius, orbit_duration=30, start_angle=Angle.RIGHT, start_frame=0, direction=Direction.CLOCKWISE):
     """

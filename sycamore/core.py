@@ -25,15 +25,10 @@ class Story():
     def get_frame(self, i):
         """Generate image for a single frame."""
         img = Image.new("RGB", (self.width, self.height), color=self.background)
-        draw = ImageDraw.Draw(img, "RGBA")
-        draw_agg = aggdraw.Draw(img)
         for obj in sorted(self.objects, key=lambda obj: obj.layer):
             if obj.present_for_frame(i):
                 props = obj.get_props_for_frame(i)
-                if obj.RENDER_METHOD == "aggdraw":
-                    obj.render(draw_agg, props, i)
-                else:
-                    obj.render(draw, props, i)
+                obj.render(img, props, i)
         return img
     
     def output_frame(self, i, filename):
@@ -60,8 +55,6 @@ class Story():
 
 
 class Object():
-    RENDER_METHOD = "imagedraw"
-
 
     def __init__(self, start=None, end=None, layer=1, props=None):
         self.start = start or 0
@@ -69,7 +62,7 @@ class Object():
         self.layer = layer
         self.props = props or dict()
         self.keyframes = [
-            Keyframe(start=0, end=None, compute=lambda _: props)
+            Keyframe(start=0, end=None, compute=lambda _: self.props)
         ]
 
     
@@ -82,7 +75,7 @@ class Object():
         return frame < self.end
 
 
-    def render(self, draw, props, frame):
+    def render(self, img, props, frame):
         return
 
     
@@ -168,10 +161,10 @@ class Group(Object):
         self.children.append(child)
 
 
-    def render(self, draw, props, frame):
+    def render(self, img, props, frame):
         for child in self.children:
             child_props = child.get_props_for_frame(frame)
-            child.render(draw, child_props, frame, offset=(props["x"], props["y"]))
+            child.render(img, child_props, frame, offset=(props["x"], props["y"]))
 
 
 class Rectangle(Object):
@@ -188,9 +181,10 @@ class Rectangle(Object):
         for color in ["fill", "outline"]:
             self.props[color] = get_rgb(self.props[color])
 
-    def render(self, draw, props, frame, offset=(0, 0)):
+    def render(self, img, props, frame, offset=(0, 0)):
         x = round(props["x"] + offset[0])
         y = round(props["y"] + offset[1])
+        draw = ImageDraw.Draw(img)
         draw.rectangle(
             [(x, y), (x + props["width"], y + props["height"])],
             fill=props["fill"], outline=props["outline"], width=props["outline_width"]
@@ -198,7 +192,6 @@ class Rectangle(Object):
 
 
 class Text(Object):
-    RENDER_METHOD = "aggdraw"
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -207,19 +200,18 @@ class Text(Object):
         self.props.setdefault("text", "Text")
         self.props.setdefault("fill", "black")
         self.props.setdefault("font", None)
+        self.props.setdefault("size", 12)
         for color in ["fill"]:
             self.props[color] = get_rgb(self.props[color])
 
-    def render(self, draw, props, frame, offset=(0, 0)):
+    def render(self, img, props, frame, offset=(0, 0)):
         x = round(props["x"] + offset[0])
         y = round(props["y"] + offset[1])
-        draw.text(
-            (x, y), props["text"], props["font"]
-        )
-        draw.flush()
+        draw = ImageDraw.Draw(img)
+        font = load_font(props["font"], props["size"])
+        draw.text((x, y), props["text"], font=font, fill=props["fill"])
 
 class Arc(Object):
-    RENDER_METHOD = "aggdraw"
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -234,7 +226,8 @@ class Arc(Object):
         for color in ["fill"]:
             self.props[color] = get_rgb(self.props[color])
 
-    def render(self, draw, props, frame, offset=(0, 0)):
+    def render(self, img, props, frame, offset=(0, 0)):
+        draw = aggdraw.Draw(img)
         x0 = round(props["x0"] + offset[0])
         y0 = round(props["y0"] + offset[1])
         x1 = round(props["x1"] + offset[0])
@@ -245,4 +238,31 @@ class Arc(Object):
         draw.arc(
             (x0, y0, x1, y1), start_angle, end_angle, pen
         )
+        draw.flush()
+
+
+class Ellipse(Object):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.props.setdefault("x0", 0)
+        self.props.setdefault("y0", 0)
+        self.props.setdefault("x1", 100)
+        self.props.setdefault("y1", 100)
+        self.props.setdefault("fill", "white")
+        self.props.setdefault("outline", "black")
+        self.props.setdefault("width", 5)
+        for color in ["fill", "outline"]:
+            self.props[color] = get_rgb(self.props[color])
+
+    def render(self, img, props, frame, offset=(0, 0)):
+        x0 = round(props["x0"] + offset[0])
+        y0 = round(props["y0"] + offset[1])
+        x1 = round(props["x1"] + offset[0])
+        y1 = round(props["y1"] + offset[1])
+        draw = aggdraw.Draw(img)
+        pen = aggdraw.Pen(props["outline"], props["width"])
+        color = props["fill"]
+        brush = aggdraw.Brush((color[0], color[1], color[2]), color[3])
+        draw.ellipse((x0, y0, x1, y1), pen, brush)
         draw.flush()
