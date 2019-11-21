@@ -22,25 +22,30 @@ class StorySequence():
     def add_story(self, story):
         self.stories.append(story)
 
-    def output_video(self, filename, fps=30):
+    def output_video(self, filename, fps=30, log=True):
         if os.path.exists(filename):
             os.remove(filename)
         video = cv2.VideoWriter(filename, -1, fps, (self.width, self.height))
         for story in self.stories:
             if isinstance(story, Story):
                 for i in range(story.frames):
+                    if log:
+                        print(f"Writing story {story.name}, frame {i}...")
                     frame = story.get_frame(i)
                     video.write(cv2.cvtColor(numpy.array(frame), cv2.COLOR_RGB2BGR))
             elif isinstance(story, Video):
-                for frame in story.frames:
+                for i, frame in enumerate(story.frames):
+                    if log:
+                        print(f"Writing story {story.name}, frame {i}...")
                     video.write(frame)
         video.release()
 
         
 class Story():
 
-    def __init__(self, width=1920, height=1080, frames=1, background="white"):
+    def __init__(self, name="Story", width=1920, height=1080, frames=1, background="white"):
         """Create a new story."""
+        self.name = name
         self.width = width
         self.height = height
         self.background = get_rgb(background)
@@ -66,11 +71,13 @@ class Story():
         for i in range(self.frames):
             self.output_frame(i, f"{base_filename}_{str(start + i).zfill(digits)}.png")
 
-    def output_video(self, filename, fps=30):
+    def output_video(self, filename, fps=30, log=True):
         if os.path.exists(filename):
             os.remove(filename)
         video = cv2.VideoWriter(filename, -1, fps, (self.width, self.height))
         for i in range(self.frames):
+            if log:
+                print(f"Writing story {self.name}, frame {i}...")
             frame = self.get_frame(i)
             video.write(cv2.cvtColor(numpy.array(frame), cv2.COLOR_RGB2BGR))
         video.release()
@@ -80,7 +87,8 @@ class Story():
 
 
 class Video():
-    def __init__(self, filename):
+    def __init__(self, filename, name=None):
+        self.name = name or filename
         self.frames = []
         vidcap = cv2.VideoCapture(filename)
         while True:
