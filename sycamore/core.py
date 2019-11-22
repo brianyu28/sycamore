@@ -30,13 +30,13 @@ class StorySequence():
             if isinstance(story, Story):
                 for i in range(story.frames):
                     if log:
-                        print(f"Writing story {story.name}, frame {i}...")
+                        print(f"Writing story {story.name}, frame {i} of {story.frames - 1}...")
                     frame = story.get_frame(i)
                     video.write(cv2.cvtColor(numpy.array(frame), cv2.COLOR_RGB2BGR))
             elif isinstance(story, Video):
                 for i, frame in enumerate(story.frames):
                     if log:
-                        print(f"Writing story {story.name}, frame {i}...")
+                        print(f"Writing story {story.name}, frame {i} of {story.frames - 1}...")
                     video.write(frame)
         video.release()
 
@@ -77,7 +77,7 @@ class Story():
         video = cv2.VideoWriter(filename, -1, fps, (self.width, self.height))
         for i in range(self.frames):
             if log:
-                print(f"Writing story {self.name}, frame {i}...")
+                print(f"Writing story {self.name}, frame {i} of {self.frames - 1}...")
             frame = self.get_frame(i)
             video.write(cv2.cvtColor(numpy.array(frame), cv2.COLOR_RGB2BGR))
         video.release()
@@ -143,6 +143,9 @@ class Object():
         # No interpolation
         if interpolate == False:
             self.keyframes.append(Keyframe(start=last.start, end=frame, compute=last.compute))
+
+            new_props = copy.copy(last_props)
+            new_props.update(props)
 
         # If a specific interpolation function is defined
         elif callable(props):
@@ -234,11 +237,12 @@ class Rectangle(Object):
         width = round(props["width"])
         height = round(props["height"])
         outline_width = round(props["outline_width"])
-        draw = ImageDraw.Draw(img, "RGBA")
-        draw.rectangle(
-            [(x, y), (x + width, y + height)],
-            fill=props["fill"], outline=props["outline"], width=outline_width
-        )
+        draw = aggdraw.Draw(img)
+        pen = aggdraw.Pen(props["outline"], outline_width)
+        color = props["fill"]
+        brush = aggdraw.Brush((color[0], color[1], color[2]), color[3])
+        draw.rectangle((x, y, x + width, y + height), pen, brush)
+        draw.flush()
         return img
 
 
@@ -332,15 +336,21 @@ class Image(Object):
         self.props.setdefault("y", 0)
         self.props.setdefault("width", width)
         self.props.setdefault("height", height)
-        self.props.setdefault("opacity", 128)
+        self.props.setdefault("opacity", 255)
 
     def render(self, img, props, frame, offset=(0, 0)):
         imageLayer = PILImage.new("RGBA", img.size, (255, 255, 255, 0))
         x = round(props["x"] + offset[0])
         y = round(props["y"] + offset[1])
-        copy = self.image.copy()
+        width = round(props["width"])
+        height = round(props["height"])
+        if self.image.size != (width, height):
+            image = self.image.resize((width, height))
+        else:
+            image = self.image
+        copy = image.copy()
         copy.putalpha(round(props["opacity"]))
-        imageLayer.paste(copy, (x, y), self.image)
+        imageLayer.paste(copy, (x, y), image)
         return PILImage.alpha_composite(img, imageLayer)
 
 

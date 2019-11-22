@@ -25,6 +25,11 @@ def get_rgb(color):
         return (color[0], color[1], color[2], 255)
 
 
+def get_frame(seconds, offset=0, fps=30):
+    """Gets the frame number for a particular event, given a time of seconds and an offset of number of frames."""
+    return round(seconds * fps) - offset
+
+
 @lru_cache(maxsize=128)
 def load_font(filename, size=12):
     return ImageFont.truetype(filename, int(size))
