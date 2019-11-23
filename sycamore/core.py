@@ -268,6 +268,22 @@ class Text(Object):
         draw.text((x, y), props["text"], font=font, fill=props["fill"])
         return PILImage.alpha_composite(img, txt)
 
+    
+    def size(self, frame=0):
+        props = self.get_props_for_frame(frame)
+        txt = PILImage.new("RGBA", (1920, 1080), (255, 255, 255, 0))
+        draw = ImageDraw.Draw(txt)
+        font = load_font(props["font"], props["size"])
+        return draw.textsize(text=props["text"], font=font)
+
+    def center(self, width, height, frame=0):
+        text_width, text_height = self.size(frame=frame)
+        self.add_keyframe(frame, {
+            "x": (width - text_width) / 2,
+            "y": (height - text_height) / 2
+        })
+        
+
 class Arc(Object):
 
     def __init__(self, *args, **kwargs):
