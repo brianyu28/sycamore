@@ -366,7 +366,10 @@ class Image(Object):
             image = self.image
         copy = image.copy()
         copy.putalpha(round(props["opacity"]))
-        imageLayer.paste(copy, (x, y), image)
+        try:
+            imageLayer.paste(copy, (x, y), image)
+        except ValueError:
+            imageLayer.paste(copy, (x, y))
         return PILImage.alpha_composite(img, imageLayer)
 
 
