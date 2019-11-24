@@ -163,7 +163,7 @@ class Object():
 
         # Interpolation
         else:
-            color_props = ["fill", "background", "outline"]
+            color_props = ["color", "fill", "background", "outline"]
             for prop in color_props:
                 if props.get(prop):
                     props[prop] = get_rgb(props[prop])
