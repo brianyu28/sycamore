@@ -10,7 +10,7 @@ setup(
     include_package_data=True,
     install_requires=[
         "numpy",
-        "pillow==6.2.0",
+        "pillow==8.1.1",
     ],
     license="GPL-3.0",
     long_description=readme,
